@@ -1,0 +1,831 @@
+---
+format: html
+editor: visual
+  markdown: 
+    wrap: 72
+---
+
+## Práctica de Guillermo Barrio
+
+*Esta es la práctica de Guillermo Barrio correspondiente al módulo Estadística y Data Mining.*
+
+*En general, para diferenciar mis comentarios de los enunciados, los primeros estarán en cursiva.*
+
+Vasmos a cargar el dataset de AirBnB descargado de [aquí](https://public.opendatasoft.com/explore/dataset/airbnb-listings/export/?disjunctive.host_verifications&disjunctive.amenities&disjunctive.features&q=Madrid&dataChart=eyJxdWVyaWVzIjpbeyJjaGFydHMiOlt7InR5cGUiOiJjb2x1bW4iLCJmdW5jIjoiQ09VTlQiLCJ5QXhpcyI6Imhvc3RfbGlzdGluZ3NfY291bnQiLCJzY2llbnRpZmljRGlzcGxheSI6dHJ1ZSwiY29sb3IiOiJyYW5nZS1jdXN0b20ifV0sInhBeGlzIjoiY2l0eSIsIm1heHBvaW50cyI6IiIsInRpbWVzY2FsZSI6IiIsInNvcnQiOiIiLCJzZXJpZXNCcmVha2Rvd24iOiJyb29tX3R5cGUiLCJjb25maWciOnsiZGF0YXNldCI6ImFpcmJuYi1saXN0aW5ncyIsIm9wdGlvbnMiOnsiZGlzanVuY3RpdmUuaG9zdF92ZXJpZmljYXRpb25zIjp0cnVlLCJkaXNqdW5jdGl2ZS5hbWVuaXRpZXMiOnRydWUsImRpc2p1bmN0aXZlLmZlYXR1cmVzIjp0cnVlfX19XSwidGltZXNjYWxlIjoiIiwiZGlzcGxheUxlZ2VuZCI6dHJ1ZSwiYWxpZ25Nb250aCI6dHJ1ZX0%3D&location=16,41.38377,2.15774&basemap=jawg.streets)
+
+![](descargar.png)
+
+*Comenzamos con la carga del dataset, que se ha realizado sin problemas. He añadido un encoding = UTF-8 para que leyese los nombres de los barrios correctamente.*
+
+```{r}
+airbnb<-read.csv('airbnb-listings.csv',sep = ';',  encoding = "UTF-8")
+options(repr.plot.height=4,repr.plot.width=6,repr.plot.res = 300)
+```
+
+1.  Vamos a quedarnos con las columnas de mayor interés: 'City','Room.Type','Neighbourhood','Accommodates','Bathrooms','Bedrooms','Beds','Price','Square.Feet','Guests.Included','Extra.People','Review.Scores.Rating','Latitude', 'Longitude' Nos quedarmos solo con las entradas de Madrid para Room.Type=="Entire home/apt" y cuyo barrio (Neighbourhood) no está vacio '' Podemos eliminar las siguientes columnas que ya no son necesarias: "Room.Type",'City' Llama a nuevo dataframe df_madrid.
+
+*Primero de todo cargamos la librería tidyverse, que incluye dplyr, que utilizaremos preferentemente. Además, almacenamos las columnas que vamos a utilizar en una lista.*
+
+```{r}
+library(tidyverse)
+
+
+columnas <- c('City','Room.Type','Neighbourhood','Accommodates','Bathrooms','Bedrooms','Beds','Price','Square.Feet','Guests.Included','Extra.People','Review.Scores.Rating','Latitude', 'Longitude')
+```
+
+*Como prevemos que el número de pisos con datos de m2 es importante, iremos revisándolo la medida que avancemos en la práctica. De entrada, encontramos que hay casi 600.*
+
+```{r}
+
+airbnb |> filter(!is.na(Square.Feet)) |> summarize(num=n())
+
+
+```
+
+*Ahora seleccionamos del dataset las columnas que hemos mencionado antes, y escogemos los piso de Madrid y, de éstos, los que tienen el dato del barrio al que pertenecen. Llamamos al df resultante df_madrid.*
+
+```{r}
+airbnb_1 <- airbnb[ , columnas]
+
+df_madrid <- airbnb_1 |> filter(City == 'Madrid') |> filter(Room.Type == 'Entire home/apt') |> filter(!is.na(Neighbourhood)) |> filter(Neighbourhood != '') |> select(-City, -Room.Type)
+
+
+```
+
+*Vemos que aspecto digamos visual tiene el df df_madrid.*
+
+```{r}
+head(df_madrid)
+```
+
+*Estudiamos más detenidamente el df, y vemos que todas las columnas son numéricas excepto el nombre del barrio.*
+
+```{r}
+str(df_madrid)
+```
+
+*Volvemos a chequear el número de filas que no son NA en la columna de square.meters; quedan 347.*
+
+```{r}
+df_madrid |> filter(!is.na(Square.Feet)) |> summarize(num=n())
+```
+
+------------------------------------------------------------------------
+
+2.  Crea una nueva columna llamada Square.Meters a partir de Square.Feet. Recuerda que un pie cuadrado son 0.092903 metros cuadrados.
+
+*Creamos la nueva columna, que redondeamos a dos decimales. Comprobamos que efectivamente existe.*
+
+```{r}
+
+df_madrid$Square.Meters <- round(df_madrid$Square.Feet * 0.092903, 2)
+
+str(df_madrid)
+
+```
+
+------------------------------------------------------------------------
+
+3.  ¿Que porcentaje de los apartamentos no muestran los metros cuadrados? Es decir, ¿cuantos tienen NA en Square.Meters?
+
+*Ya sabemos que el número de apartamentos sin NA en la columna de m2 es de 347, y del str(df_madrid) que el número de filas es 5.601, con lo que el porcentaje correspondiente es la división de ambos números.De todas maneras lo comprobamos. Sale casi el 94%.*
+
+```{r}
+filas = nrow(df_madrid)
+
+filas_sm_na = df_madrid |> filter(is.na(Square.Meters)) |> summarize(num=n())
+
+cat("Porcentaje de filas con NA en la columna Square.Meters:",round(filas_sm_na$num / filas * 100, 1 ), '%')
+
+```
+
+------------------------------------------------------------------------
+
+4.  De todos los apartamentos que tienen un valor de metros cuadrados diferente de NA ¿Que porcentaje de los apartamentos tienen 0 metros cuadrados?
+
+*Hacemos un filtrado de las filas con los m2 igual a cero con la funcion filter(). Si queremos el dato, una alternativa rápida es ver el numero de filas del dataframe resultante. Después calculamos el porcentaje usando el dato de filas que no son NA.*
+
+```{r}
+
+filas_sm_cero = nrow(df_madrid |> filter(Square.Meters == 0))
+
+pc_cero = round(filas_sm_cero / (filas - filas_sm_na$num) * 100, 1)
+
+# filas_sm_cero
+
+cat("Porcentaje de filas con valor cero en la columna Square.Meters de aquellas que no son NA:", pc_cero , '%')
+
+
+```
+
+------------------------------------------------------------------------
+
+5.  Reemplazar todos los 0m\^2 por NA
+
+*Reemplazamos los valores de cero por NA en la columna Square.Meters. Comprobamos que el número de filas con datos no NA en esa columna desciende a 219.*
+
+```{r}
+
+df_madrid["Square.Meters"][df_madrid["Square.Meters"] == 0] <- NA
+
+df_madrid |> filter(!is.na(Square.Meters)) |> summarize(num=n())
+
+
+```
+
+*Repasamos el dataframe df_madrid tras los últimos cambios, con head() y str().*
+
+```{r}
+head(df_madrid)
+```
+
+```{r}
+str(df_madrid)
+```
+
+------------------------------------------------------------------------
+
+Hay muchos NAs, vamos a intentar crear un modelo que nos prediga cuantos son los metros cuadrados en función del resto de variables para tratar de rellenar esos NA. Pero **antes de crear el modelo** vamos a hacer: \* pintar el histograma de los metros cuadrados y ver si tenemos que filtrar algún elemento más. \* crear una variable sintética nueva basada en la similitud entre barrios que usaremos en nuestro modelo.
+
+6.  Pinta el histograma de los metros cuadrados y ver si tenemos que filtrar algún elemento más
+
+*Pintamos en azul el histograma de los metros cuadrados y, efectivamente, vemos que hay un piso con cerca de 500 m2, que, aunque fuese real, distorsionaría quizás en demasía nuestro análisis.*
+
+```{r}
+
+library(ggplot2)
+
+ggplot(data=df_madrid, aes(Square.Meters)) + geom_histogram(color = 'blue', fill = 'blue')
+```
+
+*Eliminamos las filas con una superficie de más de 250 m2, que es una sola. En este caso tenemos que hacer que filter() toma también los NA, con la función replace_na(); en caso contraro los eliminaría.*
+
+```{r}
+
+df_madrid <- df_madrid |> filter( (Square.Meters < 250) |> replace_na(TRUE) )
+
+nrow(df_madrid)
+
+```
+
+*Volvemos a dibujar el histograma, para comprobar que la fila ya no la tenemos.*
+
+```{r}
+
+
+ggplot(data=df_madrid, aes(Square.Meters)) + geom_histogram(color = 'red', fill = 'red')
+
+
+```
+
+------------------------------------------------------------------------
+
+7.  Asigna el valor NA a la columna Square.Meters de los apartamentos que tengan menos de 20 m\^2
+
+*Ahora cambiamos los valores de menos de 20m2 a NA, y comprobamos que los valores dentro de Square.Meters que no son NA se ha reducido a 173.*
+
+```{r}
+
+df_madrid["Square.Meters"][df_madrid["Square.Meters"] < 20] <- NA
+
+df_madrid |> filter(!is.na(Square.Meters)) |> summarize(num=n())
+
+```
+
+*Hacemos un nuevo repaso al dataframe df_madrid con head() y str(). No vemos nada raro.*
+
+```{r}
+
+head(df_madrid)
+
+str(df_madrid)
+
+
+```
+
+------------------------------------------------------------------------
+
+8.  Existen varios Barrios que todas sus entradas de Square.Meters son NA, vamos a eliminar del dataset todos los pisos que pertenecen a estos barrios.
+
+*En este caso, lo que vamos a hacer es calcular para cada barrio en número de pisos, y el número de NAs que hay en la columna Square.Meters. En aquellos barrios donde ambas cantidades sean la misma serán los barrios donde hay que eliminar todos sus pisos. Haremos esto en varios pasos.*
+
+*Empezamos calculando el número de pisos por barrios.*
+
+```{r}
+
+numero_pisos <- df_madrid |> group_by(Neighbourhood) |> summarize(num=n())
+
+
+head(numero_pisos)
+
+
+```
+
+*Ahora calculamos por barrios en número de pisos con NA en la columna Square.Meters, y lo almacenamos en el DF numero_sm_na. Después copiamos la columna que acabamos de calcular en el DF numero_pisos, que hemos calculado en el chunk anterior. Añadimos además la diferencia de ambas columnas, lo que nos indica cuántos pisos en cada barrio sí que tienen el dato de sus m2.*
+
+```{r}
+
+numero_sm_na <- df_madrid |> group_by(Neighbourhood) |> filter(is.na(Square.Meters)) |> summarize(num_na = n())
+
+numero_pisos$num_na <- numero_sm_na$num_na
+
+numero_pisos$no_na <- numero_pisos$num - numero_pisos$num_na
+
+head(numero_pisos)
+
+
+
+```
+
+*Podemos ver que, por definición, seguimos teniendo 173 pisos con el dato de superficie no NA, y que el máximo en un determinado barrio es 28.*
+
+```{r}
+sum(numero_pisos$no_na)
+max(numero_pisos$no_na)
+```
+
+*Si ordenamos los barrios por número de pisos vemos que solo hay 4 que superen los 20 pisos. Va a ser difícil, pienso, sacar muchas conclusiones estadísticas de barrios concretos.*
+
+```{r}
+
+numero_pisos |> arrange( desc(no_na) )
+
+
+```
+
+*Ahora toca determinar los barrios que tienen todos sus pisos con NA en Square.Meters, que los encontramos filtrando para los que las columnas num y num_na sean iguales. También se podría hacer filtrando los que la columna no_na fuese cero. Almacenamos estos barrios en barrios_na.*
+
+```{r}
+
+aux <- numero_pisos |> filter(num == num_na)
+
+# head(aux)
+
+barrios_na <- aux$Neighbourhood
+
+
+barrios_na
+
+```
+
+*Ahora eliminamos los pisos de los barrios que hemos encontrado en el chunk anterior.*
+
+```{r}
+
+df_madrid <- df_madrid |> filter(!Neighbourhood %in% barrios_na)
+
+
+```
+
+*Por curiosidad, podemos calcular la media de los m2 de los pisos para los que tenemos datos. Sale 68 m2, parece razonable.*
+
+```{r}
+mean(df_madrid$Square.Meters, na.rm = TRUE)
+```
+
+*Podemos hace un repaso al DF df_madrid de nuevo. Vemos que al eliminar varios barrios el número de filas se ha reducido de unas 5.600 a 4.900.*
+
+```{r}
+
+head(df_madrid)
+
+str(df_madrid)
+```
+
+*Podemos hacer un dataframe que calcule por barrios los pisos que no son NA en Square.Meters. Vemos que hay 38 barrios, de los que los que más tienen son Sol y Malasaña con más de 20, pero que existen unos 15 con apenas 1. La suma sigue siendo, naturalmente, 173.*
+
+```{r}
+numero_sm_no_na <- df_madrid |> group_by(Neighbourhood) |> filter(!is.na(Square.Meters)) |> summarize(num_no_na = n()) |> arrange( desc(num_no_na) )
+
+numero_sm_no_na
+
+sum(numero_sm_no_na$num_no_na)
+
+```
+
+    ------------------------------------------------------------------------
+
+9.  ¿Tienen todos los barrios los mismos metros cuadrados de media? ¿Con que test lo comprobarías?
+
+*Lo podemos comprobar con un test Anova, si es que la distribución de superficies en cada barrio es gaussiana. Si no lo es, podemos utilizar oneway, o también kruskal. Con todo, antes preferimos echar un vistazo a las medias. Primero calculamos un DF con las medias por barrios, df_medias.*
+
+```{r}
+df_medias <- df_madrid |> group_by(Neighbourhood) |> summarize(media_sm = mean(Square.Meters, na.rm = TRUE) )
+
+df_medias
+
+
+```
+
+*También podemos dibujar un histograma de las medias. A priori vemos que hay bastante dispersión, aunque teniendo en cuenta que tenemos 15 barrios con un solo dato, era de esperar.*
+
+```{r}
+
+ggplot(data=df_medias, aes(media_sm)) + geom_histogram(color = 'green', fill = 'green', bins = 10)
+
+
+```
+
+*Ahora confeccionamos el DF que utilizaremos para hacer los tests de igualdad de medias de superficie. Eliminamos de df_madrid los NA en Square.Meters y nos quedamos con esta columna y la del nombre del barrio. Este nuevo df lo llamamos df_test_sm. Hacemos un head() y un str().*
+
+```{r}
+df_test_sm <- df_madrid |> filter(!is.na(Square.Meters)) |> select(Neighbourhood, Square.Meters)
+
+head(df_test_sm)
+```
+
+```{r}
+str(df_test_sm)
+```
+
+*Comprobamos para los 4 barrios con más pisos en df_test_sm si la distribución de superficies es gaussiana para poder utilizar, en su caso, el test de Anova. Lo cierto es que el resultado no es tranquilizante, pues los dos primeros de ellos no son, y los dos siguientes no lo podemos descartar. Para el resto de barrios, el número de pisos pienso que es demasiado bajo para ser significativo, y, de todas formas, ya tenemos dos barrios importantes que no son gaussianos.*
+
+```{r}
+
+
+pisos_sol <- df_test_sm |> filter(Neighbourhood == 'Sol') |> pull(Square.Meters)
+
+pisos_malasana <- df_test_sm |> filter(Neighbourhood == 'Malasaña') |> pull(Square.Meters)
+
+pisos_embajadores <- df_test_sm |> filter(Neighbourhood == 'Embajadores') |> pull(Square.Meters)
+
+pisos_LaLatina <- df_test_sm |> filter(Neighbourhood == 'La Latina') |> pull(Square.Meters)
+
+shapiro.test(pisos_sol)
+
+shapiro.test(pisos_malasana)
+
+shapiro.test(pisos_embajadores)
+
+shapiro.test(pisos_LaLatina)
+
+#pisos_sol
+
+
+```
+
+*Podemos intentar utilizar el test de oneway, que no requiere que las distribuciones sean gaussianas. Sin embargo, nos encontramos con el mensaje de error de que no hay suficientes observaciones. Supongo que ello es consecuencia de que haya en muchos barrios solo una de ellas.*
+
+```{r}
+
+oneway.test(Square.Meters ~ Neighbourhood, data = df_test_sm)
+
+
+
+```
+
+*Podemos intentarlo con el test de kruskal, que sí funciona. El p-valor que obtenemos es menor de 0,05, por lo que podemos descartar que todas las medias sean iguales, algo que no sorprende visto el histograma. De hecho, si acaso me sorprende que el p-valor haya sido de 0,01; uno pensaría que debería haber sido incluso más bajo.*
+
+```{r}
+
+kruskal.test(Square.Meters ~ Neighbourhood, data = df_test_sm)
+
+
+```
+
+    ------------------------------------------------------------------------
+
+10. Vamos a agrupar los barrios por metros cuadrados. Podemos usar una matriz de similaridad de Tukey. Muestra como de similares o diferentes son los barrios si nos fijámos únicamente en los metros cuadrados de los pisos. ¿Como se diferencia la media del Barrio A al Barrio B? (Es decir, cual sería el pvalor suponiendo una H0 en la que las medias son iguales)
+
+*Podemos intentar ccalcular el objeto TuckeyHSD.Y afortunadamente funciona. Podemos echar un vistazo y lo que obtenemos son una gran mayoria de p valores iguales a 1. No es de extrañar, pues en muchos casos tenemos barrios con un solo dato. En ese caso, o con muy pocos datos, los intervalos de confianza son tan amplios que las medias de dos barrios se tienen que solapar. Para no poder descartar que las medias fuesen iguales el p valor debería de valer al menos 0,05.*
+
+```{r}
+
+tky <- TukeyHSD(aov( Square.Meters ~ Neighbourhood, data = df_test_sm))
+
+#tky
+
+```
+
+*Ahora calculamos la matriz de similaridad de Tukey con el código que vimos en clase, adaptado a nuestro caso. Vemos que en muchos casos los p valores son 1 o muy cercanos a 1. Hay una excepción y es el barrio de Rios Rosas, que tiene una media de superficie de unos 200 m2, a partir de solo un piso, muy superior al resto de barrios.*
+
+```{r}
+
+
+tky<-TukeyHSD(aov( Square.Meters ~ Neighbourhood, data = df_test_sm))
+tky.result<-data.frame(tky$Neighbourhood)
+cn <-sort(unique(df_test_sm$Neighbourhood))
+resm <- matrix(NA, length(cn),length(cn))
+rownames(resm) <- cn
+colnames(resm) <- cn
+resm[lower.tri(resm) ] <- round(tky.result$p.adj,4)
+resm[upper.tri(resm) ] <- t(resm)[upper.tri(resm)] 
+diag(resm) <- 1
+
+library(ggplot2)
+library(reshape2)
+dfResm <- melt(resm)
+ggplot(dfResm, aes(x=Var1, y=Var2, fill=value))+
+  geom_tile(colour = "black")+
+  geom_text(aes(label=paste(round(value*100,0),"%")),size = 3) +
+  scale_fill_gradient(low = "white",high = "steelblue")+
+  ylab("Class")+xlab("Class")+theme_bw()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1),legend.position="none")
+
+
+
+```
+
+------------------------------------------------------------------------
+
+11. En el punto anterior has creado una matriz de p-valores que indica como de parecidos son dos barrios. Si su pvalor es bajo significa que los barrios son diferentes, si es alto significa que los barrios se parecen. Esta matriz la podemos usar como matriz de distancia si restamos el pvalor a 1. Es decir si usamos como distancia 1-pvalor. De esta forma barrios con un pvalor alto tendrán una distancia mayor que aquellos con un pvalor bajo. Usando esta última métrica como matriz de distancias dibuja un dendrograma de los diferentes barrios.
+
+*Calculamos la matriz de distancias restando de 1 la que matriz de Tukey, resm, y la llamamos 'distancias'.*
+
+```{r}
+
+distancias <- 1 - abs(resm)
+
+label_barrios <- rownames(distancias)
+
+```
+
+*Ahora ya podemos pasar a calcular y dibujar el dendrograma, utilizando el comando as.dist(). Lo cierto es que sale mejor de lo que había yo esperado, pues me temía que todos los barrios salvo 2 o 3 estuviesen en un mismo cluster que fuese imposible de diferenciar, dadas las pequeñas distancias que habíamos encontrado. Es una pena que los nombres salgan tan pequeños, al menos en mi versión de RStudio.*
+
+```{r fig.height=8, fig.width=8}
+
+
+library(dendextend)
+
+barrios.dist<- as.dist(distancias)
+
+hc <- hclust(barrios.dist, method="complete")
+
+hcd <- as.dendrogram(hc)
+
+par(cex = 0.3)
+
+plot(hcd)
+
+
+
+```
+
+*Podemos dibujar el dendrograma con la librería dendextend, que hace que sea algo más agradable a la vista.*
+
+```{r fig.height=8, fig.width=7}
+
+#labels(hcd) <- df_test_sm$Neighbourhood[labels(hcd)]
+
+#labels(hcd) <- labels(hcd)
+
+hcd <- set(hcd, "labels_cex", 0.45) 
+
+plot(color_branches(hcd, h = 0.2), horiz=TRUE, cex = 0)
+
+abline(v = 0.2, col="red")
+
+```
+
+------------------------------------------------------------------------
+
+10. ¿Que punto de corte sería el aconsejable?, ¿cuantos clusters aparecen?
+
+*Parece claro que el corte apropiado debería ser a la altura h = 0.2, lo que crearía 3 clusters. En teoría se podría crear un cuarto con un h = 0.05, pero este último cluster solo incluiría el barrio de Rios Rosas, que tiene solo un apartamento con datos de superficie.*
+
+*Hacemos un cutree con h = 0.2, y los muestra los barrios con sus clusters.*
+
+```{r}
+
+cutree_1h.dendrogram(hcd, h = 0.2)
+
+```
+
+*Estudiamos el objeto cutree para poder definir mejor un dataframe con sus datos en la pregunta siguiente, en especial cómo almacena los nombres de los barrios.*
+
+```{r}
+
+str(cutree_1h.dendrogram(hcd, h = 0.2))
+
+#names(cutree_1h.dendrogram(hcd, h = 0.2))
+
+
+#cutree_1h.dendrogram(hcd, h = 0.2)[1:38]
+
+
+```
+
+------------------------------------------------------------------------
+
+11. Vamos a crear una nueva columna en el dataframe df_madrid con un nuevo identificador marcado por los clusters obtenidos. Esta columna la llamaremos neighb_id
+
+*Ahora definimos inicialmente un DF, que llamamos df_cluster, con los nombres de los barrios y el cluster, cuyos datos extraemos del objeto cutree.*
+
+```{r}
+df_cluster <- data.frame('Neighbourhood' = names(cutree_1h.dendrogram(hcd, h = 0.2)), 'neighb_id' = cutree_1h.dendrogram(hcd, h = 0.2))
+
+df_cluster$neighb_id <- as.factor(df_cluster$neighb_id)
+
+df_cluster
+
+```
+
+```{r}
+head(df_madrid)
+```
+
+*Ahora hecemos un merge de df_madrid con el dataframe que hemos definido anteriormente, y la tenemos el cluster al cual pertenece cada piso.*
+
+```{r}
+
+df_madrid <- merge(x = df_madrid, y = df_cluster, by = "Neighbourhood")
+
+head(df_madrid)
+
+
+```
+
+*Podemos ver una distribición de los pisos y barrios en función del cluster. Vemos que en el cluster 3 el número es mucho menor, algo que tendrá cierta importancia a la hora de hacer el modelo.*
+
+```{r}
+table(df_madrid$Neighbourhood, df_madrid$neighb_id)
+```
+
+------------------------------------------------------------------------
+
+12. Vamos a crear dos grupos, uno test y otro train.
+
+*Podemos empezar por repasar el dataframe df_madrid. No parece haber nada raro.*
+
+```{r}
+head(df_madrid)
+```
+
+```{r}
+str(df_madrid)
+
+```
+
+*Ahora lo que hacemos es eliminar las filas que tengan NA en Square.Meters, así como la columna Square.Feet, que es de facto una copia de square.Meters a distinta escala, y la columna del barrio, pues tiene tal dispersión como hemos visto que no creemos que sea útil. El nuevo DF lo llamamos df_madrid_no_na. Comprobamos que seguimos teniendo 173 filas.*
+
+*Dividimos el DF df_madrid_no_na en train y test al 75/25, con una semilla. Lo cierto es que hemos probado varias, y, a grandes rasgos, hemos obtenido resultados similares, pese al bajo número de datos.*
+
+```{r}
+
+set.seed(5) 
+
+df_madrid_no_na <- df_madrid |> filter(!is.na(Square.Meters)) |> select(-Square.Feet) |> select(-Neighbourhood)
+
+str(df_madrid_no_na)
+
+idx<-sample(1:nrow(df_madrid_no_na),nrow(df_madrid_no_na)*0.75)
+
+df_madrid_no_na.train <- df_madrid_no_na[idx,]
+df_madrid_no_na.test <-df_madrid_no_na[-idx,]
+
+```
+
+------------------------------------------------------------------------
+
+13. Tratamos de predecir los metros cuadrados en función del resto de columnas del dataframe.
+
+*Podemos empezar por definir un modelo con todas las columnas, utilizando DF de train. A ver qué obtenemos.*
+
+```{r}
+
+model_sm_inicial <-lm(Square.Meters~. , data = df_madrid_no_na.train)
+
+summary(model_sm_inicial)
+
+
+```
+
+*Parece que las columnas más significativos son Bathrooms, Bedrooms y el Price, lo cual es razonable. Es un poco sorprendente que las Beds (camas), tengan una importancia tan baja. Por otro lado, vemos que el cluster con valor '2' tiene una importanca que no podemos obviar, pero no es así en el caso de '3'. Creo que es mejor crear una columna binaria, una forma de OneHot Encoding que será cero si no estamos en el cluster 2, y 1 si sí lo estamos.*
+
+*En principio la creamos en el DF sin na, y repetimos el proceso de train test split.*
+
+```{r}
+
+
+df_madrid_no_na <- df_madrid_no_na |> mutate(neighb_2 = if_else(neighb_id == "2", 1, 0))
+
+
+```
+
+```{r}
+set.seed(5) 
+
+#df_madrid_no_na <- df_madrid |> filter(!is.na(Square.Meters)) |> select(-Square.Feet) |> select(-Neighbourhood)
+
+str(df_madrid_no_na)
+
+idx<-sample(1:nrow(df_madrid_no_na),nrow(df_madrid_no_na)*0.75)
+
+df_madrid_no_na.train <- df_madrid_no_na[idx,]
+df_madrid_no_na.test <-df_madrid_no_na[-idx,]
+
+```
+
+*Examinamos la nueva columa, que llamamos 'neighb_2', lo cierto es que tiene un número muy similar de ceros y unos.*
+
+```{r}
+
+summary(df_madrid_no_na.train$neighb_2)
+
+```
+
+```{r}
+
+summary(as.factor(df_madrid_no_na.train$neighb_2))
+
+
+```
+
+*Ahora probamos el modelo inicial de nuevo con todas las columnas excepto la de los clusters como factor, porque de facto la hemos sustitudo por la que acabamos de definir.*
+
+```{r}
+
+model_sm_inicial <-lm(Square.Meters~.-neighb_id , data = df_madrid_no_na.train)
+
+summary(model_sm_inicial)
+
+
+```
+
+*Como cabía esperar, nuestra nueva columna de clusters resulta ser muy significativa, y, de hecho, el R2 del modelo, que es satisfactorio, cerca del 72%, no ha sufrido variaciones apenas desde el intento inicial.*
+
+*Calculamos el modelo pues con las columnas Bedrooms, Bathrooms, Price y neighb_2, siendo todas ellas significativas y con un R2 de 0,68, que parece satisfactorio.*
+
+```{r}
+
+model_sm <-lm(Square.Meters ~ Bedrooms + Bathrooms + Price + neighb_2, data = df_madrid_no_na.train)
+
+summary(model_sm)
+
+```
+
+*A continuación podemos hacer el análisis de resíduos para el dataset de train. Vemos que, más o menos se mantienen en un mismo rango, excepto quizás en los pisos de mayor superficie.*
+
+```{r}
+
+df_madrid_no_na.train$sm_est <- predict(model_sm, df_madrid_no_na.train)
+
+ggplot(df_madrid_no_na.train, aes(x = Square.Meters, y = Square.Meters - sm_est)) + geom_point()
+
+
+
+```
+
+*Los resíduos deberían seguir una distribución normal y no es realmente el caso en los quantiles mayores. No parece indicar, por lo tanto, que la calidad del modelo sea precisamente muy alta.*
+
+```{r}
+hist(df_madrid_no_na.train$Square.Meters - df_madrid_no_na.train$sm_est, 12)
+
+qqnorm(df_madrid_no_na.train$Square.Meters - df_madrid_no_na.train$sm_est)
+
+qqline(df_madrid_no_na.train$Square.Meters - df_madrid_no_na.train$sm_est, col = 'orange', lwd =2)
+```
+
+*Podemos comprobar los datos de R2 con la librería caret, que nos servirá a continuación para el dataset de test.*
+
+```{r}
+library(caret)
+```
+
+```{r}
+caret::postResample(obs = df_madrid_no_na.train$Square.Meters, pred = df_madrid_no_na.train$sm_est)
+```
+
+------------------------------------------------------------------------
+
+14. Evaluar la calidad de vuestro modelo
+
+*Para seguir viendo la calidad del modelo tenemos que ver los residuos del dataset de test. En el cuadro anterior vemos que más o menos se mantienen en el mismo rango a lo largo de los valores de la columna Square.Meters. Hemos tenido la ventaja, o más bien suerte, en el dataset de que los pisos con cerca de 200 m2 han caído en el DF de train, lo cual pienso que afecta algo los resultados. Todo ello se debe también al bajo número de filas con las que contábamos.*
+
+```{r}
+
+df_madrid_no_na.test$sm_est <- predict(model_sm, df_madrid_no_na.test)
+
+# plot(powerplant.test$PE,(powerplant.test$PE-powerplant.test$pe_est))
+
+ggplot(df_madrid_no_na.test, aes(x = Square.Meters, y = Square.Meters - sm_est)) + geom_point()
+
+
+
+```
+
+*Podemos ver a continuación que tenemos, en cierto modo, una distribución normal en los resíduos, de hecho, casi mejor que en el caso de train. Lo que ocurre es que, de nuevo, todo ello depende de la distribución de train y test, en un escenario como el nuestro de un número bajo de filas. En conjunto, creo que tenemos un modelo aceptable dadas las circunstancias, es especial porque es relativamente simple, con columnas como dormitorios, baños, precio y el cluster, que de facto es función directa del barrio, que deberían estar disponibles la mayor parte de los casos.*
+
+```{r}
+
+
+hist(df_madrid_no_na.test$Square.Meters - df_madrid_no_na.test$sm_est, 12)
+
+qqnorm(df_madrid_no_na.test$Square.Meters - df_madrid_no_na.test$sm_est)
+
+qqline(df_madrid_no_na.test$Square.Meters - df_madrid_no_na.test$sm_est, col = 'orange', lwd =2)
+
+
+```
+
+*Utilizamos de nuevo la librería caret para ver el R2 del DF de test, y nos sale más alto que en el caso de train, un 76%. Con todo, esto es también debido al bajo número de filas, que ha excluido al azar los pisos de mayor superficie. Los errores RMSE y MAE salen menores que en train por las mismas razones, pienso.*
+
+```{r}
+
+caret::postResample(obs = df_madrid_no_na.test$Square.Meters, pred = df_madrid_no_na.test$sm_est)
+
+
+```
+
+------------------------------------------------------------------------
+
+15. Si tuvieramos un anuncio de un apartamento para 6 personas (Accommodates), con 1 baño, con un precio de 80€/noche y 3 habitaciones en el barrio de Sol, con 3 camas y un review de 80. ¿Cuantos metros cuadrados tendría? Si tu modelo necesita algúna variable adicional puedes inventartela dentro del rango de valores del dataset. ¿Como varía sus metros cuadrados con cada habitación adicional?
+
+*Nuestro modelo estima que cada habitación adicional implica una superficie de 18.77791, que es el estimate de la columna Bedrooms.*
+
+*Podemos estimar inicialmente la superficie a partir de nuestro modelo. El barrio de Sol está en el cluster 1, por lo que en nuestra columna de neighb_2 podremos un cero. Estimamos una superfie de 97,57 metros cuadrados.*
+
+```{r}
+
+superficie <- predict(model_sm, data.frame(Bedrooms = 3, Bathrooms = 1, Price = 80, neighb_2 = 0 ))
+
+superficie
+
+
+```
+
+*Para tener en cuenta el resto de variables hemos calculado inicialmente en cada caso la media de las superficies que tenemos en cada caso. Para el Accomodates = 6 encontramos una media de 96,55 m2.*
+
+```{r}
+df_madrid |> filter(Accommodates == 6) |> summarize(media_sm = mean(Square.Meters, na.rm = TRUE))
+
+
+```
+
+*Para las tres camas, sale 78,02 m2.*
+
+```{r}
+
+df_madrid |> filter(Beds == 3) |> summarize(media_sm = mean(Square.Meters, na.rm = TRUE))
+
+```
+
+*Para el review, al ser una variable continua he tomado la media del rango 75-85, que nos sale 66,55 m2.*
+
+```{r}
+
+df_madrid |> filter(Review.Scores.Rating > 75) |> filter(Review.Scores.Rating < 85)  |> summarize(media_sm = mean(Square.Meters, na.rm = TRUE))
+
+```
+
+*Finalmente, y reconozco que puede no ser riguroso, he hecho la media ponderada de las cuatro superficies. Ya que la de nuestro modelo utiliza 4 variables, pesa 4x que cada una de las otras tres. Obtenemos una superficie de 90,20 m2.*
+
+```{r}
+
+superficie_est = (4 * superficie + 96.55 + 78.02 + 66.55) / 7
+
+superficie_est
+
+```
+
+------------------------------------------------------------------------
+
+16. Rellenar los Square.Meters con valor NA con el estimado con el modelo anterior.
+
+*Para rellenar la columna Square.Meters, primero de todo en el DF df_madrid tenemos que introducir la columna neighb_2.*
+
+```{r}
+
+df_madrid <- df_madrid |> mutate(neighb_2 = if_else(neighb_id == "2", 1, 0))
+
+str(df_madrid)
+
+```
+
+*Ahora aplicamos el modelo y sustituimos los NA mediante el comando mutate() de dplyr.*
+
+```{r}
+
+df_madrid <- df_madrid |> mutate(Square.Meters = if_else(is.na(Square.Meters), 
+                    predict(model_sm, newdata = data.frame(Bedrooms, Bathrooms, Price, neighb_2 )), Square.Meters))
+            
+
+str(df_madrid)
+
+```
+
+*Comprobamos que tenemos la columna Square.Meters con más valores rellenos que Square.Feet.*
+
+```{r}
+
+head(df_madrid)
+
+
+```
+
+*Falta por comprobar si tenemos muchos NA aún, y lo cierto es que no, solo quedan 22, menos del 0,5% de las filas. Se podrían eliminar facilmente, desde luego, pero quizás estemos eliminando información útil. Yo creo que no merece la pena.*
+
+```{r}
+
+df_madrid |> filter(is.na(Square.Meters)) |> summarise(n_na = n())
+
+
+```
+
+```{r}
+summary(df_madrid$Square.Meters)
+```
+
+------------------------------------------------------------------------
+
+# Fin de la práctica.
